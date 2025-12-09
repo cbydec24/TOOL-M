@@ -9,7 +9,35 @@ function toCamelCase(str: string): string {
   return str.replace(/_([a-z0-9])/g, (g) => g[1].toUpperCase());
 }
 
-// Utility function to recursively convert object keys from snake_case to camelCase
+// Optimized shallow key conversion for flat objects (like Device)
+function convertKeysToCamelCaseShallow(obj: any): any {
+  if (Array.isArray(obj)) {
+    return obj.map(item => {
+      if (item !== null && typeof item === 'object' && item.constructor === Object) {
+        const newObj: any = {};
+        for (const key in item) {
+          if (item.hasOwnProperty(key)) {
+            newObj[toCamelCase(key)] = item[key];
+          }
+        }
+        return newObj;
+      }
+      return item;
+    });
+  }
+  if (obj !== null && typeof obj === 'object' && obj.constructor === Object) {
+    const newObj: any = {};
+    for (const key in obj) {
+      if (obj.hasOwnProperty(key)) {
+        newObj[toCamelCase(key)] = obj[key];
+      }
+    }
+    return newObj;
+  }
+  return obj;
+}
+
+// Deep conversion for complex nested objects (fallback)
 function convertKeysToCamelCase(obj: any): any {
   if (Array.isArray(obj)) {
     return obj.map(convertKeysToCamelCase);
@@ -70,7 +98,16 @@ async function apiDelete(path: string) {
 
 export const getDevices = async () => {
   const data = await api("/devices");
-  return convertKeysToCamelCase(data);
+  return convertKeysToCamelCaseShallow(data);
+};
+
+// Get only devices that changed since a given timestamp (for incremental sync)
+export const getDeviceChanges = async (timestamp: string) => {
+  const data = await api(`/devices/changes/since/${encodeURIComponent(timestamp)}`);
+  return {
+    changed: convertKeysToCamelCaseShallow(data.changed),
+    timestamp: data.timestamp,
+  };
 };
 
 export const getDevice = async (id: number) => {
@@ -163,29 +200,40 @@ export const deleteSite = (id: number) => apiDelete(`/sites/${id}`);
 
 export const getTopologyLinks = async () => {
   const data = await api("/topology/links");
-  return convertKeysToCamelCase(data);
+  return convertKeysToCamelCaseShallow(data);
 };
 
 export const getTopologyGraph = async () => {
   const data = await api("/topology/graph");
-  return convertKeysToCamelCase(data);
+  return convertKeysToCamelCaseShallow(data);
 };
 
-// ------------------------------------------------------------
-// FIX: Missing export - Frontend expects getTopology()
-// ------------------------------------------------------------
+// Cache for topology data to avoid refetching on page revisit
+let topologyCache: any = null;
+let topologyCacheTime = 0;
+const TOPOLOGY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-export async function getTopology() {
+export async function getTopology(forceRefresh = false) {
+  const now = Date.now();
+  
+  // Return cached data if still valid and not forced refresh
+  if (topologyCache && !forceRefresh && (now - topologyCacheTime) < TOPOLOGY_CACHE_TTL) {
+    return topologyCache;
+  }
+
   const [graph, links] = await Promise.all([
     getTopologyGraph(),
     getTopologyLinks(),
   ]);
 
-  return {
+  topologyCache = {
     nodes: graph.nodes,
     edges: graph.edges,
     links: links,
   };
+  topologyCacheTime = now;
+  
+  return topologyCache;
 }
 
 

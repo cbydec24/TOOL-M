@@ -2,6 +2,7 @@
 
 from typing import AsyncGenerator, List
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import JSONResponse
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import or_
@@ -40,7 +41,7 @@ async def list_links(session: AsyncSession = Depends(get_session)):
 async def get_links(session: AsyncSession = Depends(get_session)):
     """Get all topology links with device names (returns raw dicts)"""
     try:
-        query = await session.execute(select(TopologyLink))
+        query = await session.execute(select(TopologyLink).order_by(TopologyLink.id))
         links = query.scalars().all()
         result = []
         for link in links:
@@ -72,7 +73,11 @@ async def get_links(session: AsyncSession = Depends(get_session)):
                 "dst_lldp_hostname": dst_lldp_hostname,  # LLDP-discovered hostname
             }
             result.append(link_data)
-        return result
+        
+        # Add Cache-Control headers for 5-minute caching (300 seconds)
+        response = JSONResponse(content=result)
+        response.headers["Cache-Control"] = "public, max-age=300"
+        return response
     except Exception as e:
         # avoid raising validation errors to client; log and return minimal failure info
         print(f"[Topology:get_links] error: {e}")
@@ -83,8 +88,8 @@ async def get_links(session: AsyncSession = Depends(get_session)):
 @router.get("/graph")
 async def get_graph(session: AsyncSession = Depends(get_session)):
     """Get topology graph with nodes (devices + discovered devices) and edges (device-to-device links)"""
-    # Get all managed devices as nodes
-    devices_result = await session.execute(select(Device))
+    # Get all managed devices as nodes (ordered by ID for consistency)
+    devices_result = await session.execute(select(Device).order_by(Device.id))
     devices = devices_result.scalars().all()
     
     nodes = [
@@ -100,7 +105,7 @@ async def get_graph(session: AsyncSession = Depends(get_session)):
     ]
     
     # Get all discovered devices and add as nodes with negative IDs (so they don't conflict)
-    discovered_result = await session.execute(select(DiscoveredDevice))
+    discovered_result = await session.execute(select(DiscoveredDevice).order_by(DiscoveredDevice.id))
     discovered_devices = discovered_result.scalars().all()
     
     # Map discovered device id to negative node id for graph
@@ -117,8 +122,8 @@ async def get_graph(session: AsyncSession = Depends(get_session)):
             "isDiscovered": True,
         })
     
-    # Get all links as edges
-    links_result = await session.execute(select(TopologyLink))
+    # Get all links as edges (ordered by ID for consistency)
+    links_result = await session.execute(select(TopologyLink).order_by(TopologyLink.id))
     links = links_result.scalars().all()
     
     # Build edges: include device-to-device, device-to-discovered, and discovered-to-device
@@ -149,10 +154,15 @@ async def get_graph(session: AsyncSession = Depends(get_session)):
                 "targetInterface": link.dst_interface,
             })
 
-    return {
+    graph_data = {
         "nodes": nodes,
         "edges": edges,
     }
+    
+    # Add Cache-Control headers for 5-minute caching (300 seconds)
+    response = JSONResponse(content=graph_data)
+    response.headers["Cache-Control"] = "public, max-age=300"
+    return response
 
 
 # --- Get topology links for a specific device ---
@@ -169,7 +179,7 @@ async def device_links(device_id: int, session: AsyncSession = Depends(get_sessi
                 TopologyLink.src_device_id == device_id,
                 TopologyLink.dst_device_id == device_id
             )
-        )
+        ).order_by(TopologyLink.id)
     )
     links = query.scalars().all()
 
@@ -194,7 +204,10 @@ async def device_links(device_id: int, session: AsyncSession = Depends(get_sessi
         }
         result.append(link_data)
 
-    return result
+    # Add Cache-Control headers for 5-minute caching (300 seconds)
+    response = JSONResponse(content=result)
+    response.headers["Cache-Control"] = "public, max-age=300"
+    return response
 
 
 # --- Backfill topology links (attempt to match dst_hostname to known devices) ---

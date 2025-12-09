@@ -5,7 +5,18 @@ import { Badge } from "@/components/ui/badge";
 import { Terminal, Shield, Trash2, Activity, Server, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLocation } from 'wouter';
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format } from "date-fns";
+
+function safeFormatLastSeen(val?: string | null) {
+  if (!val) return 'Never seen';
+  try {
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return 'Never seen';
+    return `Last seen ${formatDistanceToNow(d, { addSuffix: true })} (${format(d, 'Pp')})`;
+  } catch (e) {
+    return 'Never seen';
+  }
+}
 
 interface DeviceGridProps {
   devices: Device[];
@@ -58,25 +69,17 @@ export function DeviceGrid({ devices, onDelete }: DeviceGridProps) {
                 );
               })()}
             </div>
-            <Badge variant="outline" className={cn(
+            <Badge className={cn(
               "capitalize",
-              device.status === 'online' && "border-green-500 text-green-500 bg-green-50 dark:bg-green-950/20",
-              device.status === 'offline' && "border-red-500 text-red-500 bg-red-50 dark:bg-red-950/20",
-              device.status === 'warning' && "border-orange-500 text-orange-500 bg-orange-50 dark:bg-orange-950/20",
+              device.status === 'online' && "bg-green-600 text-white border-green-600",
+              device.status === 'offline' && "bg-red-600 text-white border-red-600",
+              device.status === 'warning' && "bg-orange-600 text-white border-orange-600",
             )}>
               {device.status || 'unknown'}
             </Badge>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-4 text-xs text-muted-foreground mt-2">
-              <div className="flex flex-col gap-1">
-                <span className="font-medium text-foreground">Model</span>
-                <span>{device.model || 'N/A'}</span>
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="font-medium text-foreground">Vendor</span>
-                <span>{device.vendor || 'N/A'}</span>
-              </div>
               <div className="flex flex-col gap-1">
                 <span className="font-medium text-foreground">SNMP</span>
                 <span>{device.snmpVersion || 'N/A'}</span>
@@ -88,9 +91,7 @@ export function DeviceGrid({ devices, onDelete }: DeviceGridProps) {
             </div>
             <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
               <Clock className="h-3 w-3" />
-              {device.lastSeen 
-                ? `Last seen ${formatDistanceToNow(new Date(device.lastSeen), { addSuffix: true })}`
-                : 'Never seen'}
+              {safeFormatLastSeen(device.lastSeen)}
             </div>
           </CardContent>
           <CardFooter className="bg-muted/50 p-3 flex justify-between">

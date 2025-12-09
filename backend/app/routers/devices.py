@@ -2,6 +2,7 @@
 
 from typing import AsyncGenerator, List
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import JSONResponse
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -128,7 +129,7 @@ async def test_ssh(payload: dict):
 # -----------------------------
 @router.get("/", response_model=List[DeviceSchema])
 async def list_devices(session: AsyncSession = Depends(get_session)):
-    query = await session.execute(select(DeviceModel))
+    query = await session.execute(select(DeviceModel).order_by(DeviceModel.id))
     devices = query.scalars().all()
     # Debug: log current statuses for troubleshooting frontend sync
     try:
@@ -143,6 +144,72 @@ async def list_devices(session: AsyncSession = Depends(get_session)):
         elif d.status == "down":
             d.status = "offline"
     return devices
+
+
+# --- Get only changed devices since a timestamp (for incremental sync) ---
+@router.get("/changes/since/{timestamp}")
+async def get_device_changes(timestamp: str, session: AsyncSession = Depends(get_session)):
+    """Get only devices that changed since the given ISO timestamp.
+    
+    Returns:
+    - changed: List of modified/new devices
+    - timestamp: Current server time (for next sync)
+    """
+    from datetime import datetime
+    from fastapi.responses import JSONResponse
+    
+    try:
+        # Parse ISO timestamp from client
+        since = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+    except ValueError:
+        # If timestamp is invalid, return all devices (fallback to full sync)
+        since = datetime.min
+    
+    # Get all devices that were modified OR created after the given timestamp
+    query = await session.execute(
+        select(DeviceModel)
+        .where(
+            (DeviceModel.last_seen >= since) |
+            (DeviceModel.status != 'unknown')  # Changed status
+        )
+        .order_by(DeviceModel.id)
+    )
+    devices = query.scalars().all()
+    
+    # Normalize status
+    for d in devices:
+        if d.status == "up":
+            d.status = "online"
+        elif d.status == "down":
+            d.status = "offline"
+    
+    result = [{
+        "id": d.id,
+        "hostname": d.hostname,
+        "ip_address": d.ip_address,
+        "site_id": d.site_id,
+        "device_type": d.device_type,
+        "vendor": d.vendor,
+        "model": d.model,
+        "os_version": d.os_version,
+        "snmp_version": d.snmp_version,
+        "snmp_community": d.snmp_community,
+        "status": d.status,
+        "last_seen": d.last_seen.isoformat() if d.last_seen else None,
+        "ssh_enabled": d.ssh_enabled,
+        "ssh_username": d.ssh_username,
+        "ssh_password": d.ssh_password,
+        "ssh_port": d.ssh_port,
+        "lldp_hostname": d.lldp_hostname,
+    } for d in devices]
+    
+    # Add Cache-Control headers to cache changes endpoint (2-minute cache for polling efficiency)
+    response = JSONResponse(content={
+        "changed": result,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    })
+    response.headers["Cache-Control"] = "public, max-age=120"
+    return response
 
 
 @router.get("/debug/statuses")

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '@/store';
 import { fetchDevices } from '@/features/devices/devicesSlice';
@@ -32,21 +32,29 @@ export default function Topology() {
   const [zoom, setZoom] = useState(1);
   const [topology, setTopology] = useState<TopologyData | null>(null);
   const [loading, setLoading] = useState(false);
+  const initialLoadRef = useRef(false);
+  const lastLoadTimeRef = useRef<number>(0);
 
   useEffect(() => {
     // Load devices from Redux or fetch if needed
     if (devices.length === 0) {
       dispatch(fetchDevices());
     }
-    // Load topology immediately
-    loadTopology();
+    
+    // Only load topology once on component mount
+    // Use cached data on revisit
+    if (!initialLoadRef.current) {
+      initialLoadRef.current = true;
+      loadTopology(false);
+    }
   }, [dispatch, devices.length]);
 
-  const loadTopology = async () => {
+  const loadTopology = async (forceRefresh = true) => {
     try {
       setLoading(true);
-      const topoData = await getTopology();
+      const topoData = await getTopology(forceRefresh);
       setTopology(topoData);
+      lastLoadTimeRef.current = Date.now();
     } catch (error) {
       console.error('Failed to load topology:', error);
     } finally {
@@ -143,7 +151,7 @@ export default function Topology() {
           <Button variant="outline" size="icon">
             <Move className="h-4 w-4" />
           </Button>
-          <Button variant="outline" onClick={loadTopology}>
+          <Button variant="outline" onClick={() => loadTopology(true)}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Rediscover
           </Button>

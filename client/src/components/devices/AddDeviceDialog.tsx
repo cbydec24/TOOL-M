@@ -237,8 +237,8 @@ export function AddDeviceDialog({ onAdd }: AddDeviceDialogProps) {
                           <SelectItem value="Router">Router</SelectItem>
                           <SelectItem value="Switch">Switch</SelectItem>
                           <SelectItem value="Firewall">Firewall</SelectItem>
-                          <SelectItem value="AccessPoint">Access Point</SelectItem>
-                          <SelectItem value="Server">Server</SelectItem>
+                          <SelectItem value="Voice-Gateway">Voice-Gateway</SelectItem>
+                          <SelectItem value="Other">Other</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
