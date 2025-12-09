@@ -4,8 +4,10 @@ from typing import AsyncGenerator, List
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
+from sqlalchemy import func
 from ..database import async_session
-from ..models import Device as DeviceModel, Interface as InterfaceModel, InterfaceStats as InterfaceStatsModel
+from ..models import Device as DeviceModel, Interface as InterfaceModel, InterfaceStats as InterfaceStatsModel, TopologyLink, DiscoveredDevice
 from ..schemas import Device as DeviceSchema, DeviceCreate, Interface as InterfaceSchema, InterfaceStats as InterfaceStatsSchema
 import asyncio
 import socket

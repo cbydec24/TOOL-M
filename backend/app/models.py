@@ -38,6 +38,7 @@ class Device(Base):
     ssh_username = Column(String(100))
     ssh_password = Column(String(200))
     ssh_port = Column(Integer, default=22)
+    lldp_hostname = Column(String(100), nullable=True)  # LLDP hostname from discovered device
 
     site = relationship("Site", back_populates="devices")
     interfaces = relationship("Interface", back_populates="device")
@@ -114,8 +115,20 @@ class MacChangeLog(Base):
 
 
 # -------------------------------------------------
-# Topology Links
+# Discovered Devices (auto-created from LLDP)
 # -------------------------------------------------
+class DiscoveredDevice(Base):
+    __tablename__ = "discovered_devices"
+    id = Column(Integer, primary_key=True, index=True)
+    lldp_hostname = Column(String(100), nullable=False, unique=True)  # hostname from LLDP (e.g., "SEP9433D8B287D0.nmda.in")
+    ip_address = Column(String(50), nullable=True)  # if we extract an IP from LLDP
+    first_seen = Column(TIMESTAMP, default=datetime.utcnow)
+    last_seen = Column(TIMESTAMP, default=datetime.utcnow)
+    
+    # Links that point to this discovered device
+    topology_links = relationship("TopologyLink", back_populates="discovered_device")
+
+
 # -------------------------------------------------
 # Topology Links
 # -------------------------------------------------
@@ -124,11 +137,16 @@ class TopologyLink(Base):
     id = Column(Integer, primary_key=True, index=True)
     src_device_id = Column(Integer, ForeignKey("devices.id"))
     src_interface = Column(String(100))
-    dst_device_id = Column(Integer, ForeignKey("devices.id"), nullable=True)  # neighbor may not be in DB
-    dst_hostname = Column(String(100), nullable=True)  # store LLDP neighbor hostname
+    dst_device_id = Column(Integer, ForeignKey("devices.id"), nullable=True)  # neighbor is a managed device
+    dst_discovered_device_id = Column(Integer, ForeignKey("discovered_devices.id"), nullable=True)  # neighbor is LLDP-discovered
+    dst_hostname = Column(String(100), nullable=True)  # store LLDP neighbor hostname (for backwards compat)
     dst_interface = Column(String(100))
     last_seen = Column(TIMESTAMP, default=datetime.utcnow)
-
+    
+    # Relationships with explicit foreign_keys to resolve ambiguity
+    src_device = relationship("Device", foreign_keys=[src_device_id], viewonly=True)
+    dst_device = relationship("Device", foreign_keys=[dst_device_id], viewonly=True)
+    discovered_device = relationship("DiscoveredDevice", back_populates="topology_links", viewonly=True)
 
 
 # -------------------------------------------------

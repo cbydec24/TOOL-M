@@ -356,6 +356,4 @@ It should start the Vite server and give you a local URL (
 
 like http://localhost:5000) to open in your browser.
 
-
-
 =============================================================

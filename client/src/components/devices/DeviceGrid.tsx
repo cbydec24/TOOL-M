@@ -40,6 +40,11 @@ export function DeviceGrid({ devices, onDelete }: DeviceGridProps) {
                 <Server className="h-4 w-4 text-muted-foreground" />
                 {device.hostname || 'Unknown'}
               </CardTitle>
+              {device.lldpHostname && (
+                <p className="text-xs text-gray-500 truncate max-w-[220px]">
+                  LLDP: {device.lldpHostname}
+                </p>
+              )}
               {(() => {
                 const anyD = device as any;
                 const displayIp = anyD.ipAddress ?? anyD.ip ?? anyD.ip_address ?? anyD.managementIp ?? '-';

@@ -5,9 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.database import async_session
-from app.models import Alert as AlertModel
-from app.schemas import Alert as AlertSchema, AlertBase
+from ..database import async_session
+from ..models import Alert as AlertModel
+from ..schemas import Alert as AlertSchema, AlertBase
 
 router = APIRouter()
 

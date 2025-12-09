@@ -9,9 +9,9 @@ from passlib.context import CryptContext
 from datetime import datetime, timedelta
 import jwt
 
-from app.database import async_session
-from app.models import User
-from app.schemas import Token
+from ..database import async_session
+from ..models import User
+from ..schemas import Token
 
 SECRET_KEY = "YOUR_SECRET_KEY"  # Replace with a secure random key in production
 ALGORITHM = "HS256"

@@ -4,18 +4,36 @@ import logging
 from datetime import datetime
 import platform
 import socket
-from pysnmp.hlapi import (
-    SnmpEngine,
-    CommunityData,
-    UdpTransportTarget,
-    ContextData,
-    ObjectType,
-    ObjectIdentity,
-    getCmd,
-    nextCmd,
-)
+
+# Try to import pysnmp; if it fails (e.g., on Python 3.12+), use stubs
+try:
+    from pysnmp.hlapi import (
+        SnmpEngine,
+        CommunityData,
+        UdpTransportTarget,
+        ContextData,
+        ObjectType,
+        ObjectIdentity,
+        getCmd,
+        nextCmd,
+    )
+    PYSNMP_AVAILABLE = True
+except (ImportError, ModuleNotFoundError) as e:
+    log_msg = f"pysnmp not available: {e}. SNMP operations will be stubbed."
+    print(log_msg)
+    PYSNMP_AVAILABLE = False
+    # Stub classes for when pysnmp is not available
+    class SnmpEngine: pass
+    class CommunityData: pass
+    class UdpTransportTarget: pass
+    class ContextData: pass
+    class ObjectType: pass
+    class ObjectIdentity: pass
+    class getCmd: pass
+    class nextCmd: pass
+
 from ..database import async_session
-from ..models import Device, Interface, InterfaceStats, TopologyLink
+from ..models import Device, Interface, InterfaceStats, TopologyLink, DiscoveredDevice
 from sqlalchemy.future import select
 
 # --------------------------------------------------------------------------
@@ -134,6 +152,10 @@ async def async_ping(host: str, timeout_ms: int = 1000) -> bool:
 # Async SNMP GET
 # --------------------------------------------------------------------------
 async def snmp_get(target, oid, community="public", port=161):
+    if not PYSNMP_AVAILABLE:
+        log.warning(f"SNMP not available, returning None for {target} OID={oid}")
+        return None
+    
     def run_get():
         iterator = getCmd(
             SnmpEngine(),
@@ -368,14 +390,38 @@ async def poll_device(device_info: dict, interval=5):
 
                             # Lookup neighbor device by IP (if present in DB)
                             neighbor_device = None
+                            discovered_device = None
+                            
                             if neighbor_ip:
                                 qdev = await session.execute(select(Device).where(Device.ip_address == neighbor_ip))
                                 neighbor_device = qdev.scalars().first()
 
-                            # Create topology link (with or without neighbor device ID)
-                            if neighbor_device or neighbor_ip or neighbor_name:
-                                # Check if link already exists (only if we have a neighbor device ID)
+                            # If neighbor not a managed device, try to find or create a DiscoveredDevice record
+                            if not neighbor_device and neighbor_name:
+                                qdiscov = await session.execute(select(DiscoveredDevice).where(DiscoveredDevice.lldp_hostname == neighbor_name))
+                                discovered_device = qdiscov.scalars().first()
+                                if discovered_device:
+                                    discovered_device.last_seen = datetime.utcnow()
+                                else:
+                                    # Create new DiscoveredDevice record
+                                    discovered_device = DiscoveredDevice(
+                                        lldp_hostname=neighbor_name,
+                                        ip_address=neighbor_ip or None,
+                                        first_seen=datetime.utcnow(),
+                                        last_seen=datetime.utcnow(),
+                                    )
+                                    session.add(discovered_device)
+                                    await session.flush()  # flush to get discovered_device.id
+                                    log.info(f"Created discovered device: {neighbor_name} ({neighbor_ip})")
+                                
+                                # Update the source device's lldp_hostname
+                                if device and not device.lldp_hostname:
+                                    device.lldp_hostname = neighbor_name
+
+                            # Create topology link
+                            if neighbor_device or discovered_device or neighbor_ip or neighbor_name:
                                 if neighbor_device:
+                                    # Link to managed device
                                     qlink = await session.execute(
                                         select(TopologyLink).where(
                                             (TopologyLink.src_device_id == device_id)
@@ -392,24 +438,51 @@ async def poll_device(device_info: dict, interval=5):
                                             src_device_id=device_id,
                                             src_interface=name,
                                             dst_device_id=neighbor_device.id,
+                                            dst_discovered_device_id=None,
                                             dst_interface=neighbor_iface,
                                             dst_hostname=neighbor_name,
                                             last_seen=datetime.utcnow(),
                                         )
                                         session.add(new_link)
-                                        log.info(f"{target} IF={name}: neighbor ({neighbor_name} {neighbor_ip}) linked")
+                                        log.info(f"{target} IF={name}: neighbor ({neighbor_name} {neighbor_ip}) linked to device")
+                                elif discovered_device:
+                                    # Link to discovered device
+                                    qlink = await session.execute(
+                                        select(TopologyLink).where(
+                                            (TopologyLink.src_device_id == device_id)
+                                            & (TopologyLink.src_interface == name)
+                                            & (TopologyLink.dst_discovered_device_id == discovered_device.id)
+                                            & (TopologyLink.dst_interface == neighbor_iface)
+                                        )
+                                    )
+                                    link = qlink.scalars().first()
+                                    if link:
+                                        link.last_seen = datetime.utcnow()
+                                    else:
+                                        new_link = TopologyLink(
+                                            src_device_id=device_id,
+                                            src_interface=name,
+                                            dst_device_id=None,
+                                            dst_discovered_device_id=discovered_device.id,
+                                            dst_interface=neighbor_iface,
+                                            dst_hostname=neighbor_name,
+                                            last_seen=datetime.utcnow(),
+                                        )
+                                        session.add(new_link)
+                                        log.info(f"{target} IF={name}: neighbor ({neighbor_name} {neighbor_ip}) linked to discovered device")
                                 else:
-                                    # Neighbor not in DB yet, but store the link with hostname/IP info
+                                    # Fallback: store link with hostname only (for non-matching neighbors)
                                     new_link = TopologyLink(
                                         src_device_id=device_id,
                                         src_interface=name,
-                                        dst_device_id=None,  # Will be NULL in DB
+                                        dst_device_id=None,
+                                        dst_discovered_device_id=None,
                                         dst_hostname=neighbor_name,
                                         dst_interface=neighbor_iface,
                                         last_seen=datetime.utcnow(),
                                     )
                                     session.add(new_link)
-                                    log.debug(f"{target} IF={name}: neighbor ({neighbor_name} {neighbor_ip}) stored without device ID")
+                                    log.debug(f"{target} IF={name}: neighbor ({neighbor_name} {neighbor_ip}) stored as fallback")
 
                     except Exception as e:
                         log.exception(f"Error processing interface {full_oid} on {target}: {e}")

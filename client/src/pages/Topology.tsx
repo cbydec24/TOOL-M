@@ -77,6 +77,50 @@ export default function Topology() {
     return sourceExists && targetExists;
   });
 
+  // Merge bidirectional links into a single edge per device-pair and collect interfaces for each side
+  const mergedEdges = (() => {
+    const map = new Map<string, {
+      id: string;
+      source: number;
+      target: number;
+      sourceIfs: string[];
+      targetIfs: string[];
+    }>();
+
+    for (const edge of deviceEdges) {
+      const a = edge.source;
+      const b = edge.target;
+      const min = Math.min(a, b);
+      const max = Math.max(a, b);
+      const key = `${min}-${max}`;
+
+      if (!map.has(key)) {
+        map.set(key, { id: key, source: min, target: max, sourceIfs: [], targetIfs: [] });
+      }
+
+      const entry = map.get(key)!;
+
+      // Determine which side the edge's interfaces belong to in the canonical ordering
+      if (edge.source === entry.source && edge.target === entry.target) {
+        if (edge.sourceInterface) entry.sourceIfs.push(edge.sourceInterface);
+        if (edge.targetInterface) entry.targetIfs.push(edge.targetInterface);
+      } else if (edge.source === entry.target && edge.target === entry.source) {
+        // reversed direction: swap
+        if (edge.sourceInterface) entry.targetIfs.push(edge.sourceInterface);
+        if (edge.targetInterface) entry.sourceIfs.push(edge.targetInterface);
+      }
+    }
+
+    // Deduplicate interface names
+    return Array.from(map.values()).map((e) => ({
+      id: e.id,
+      source: e.source,
+      target: e.target,
+      sourceInterface: Array.from(new Set(e.sourceIfs)).join(', '),
+      targetInterface: Array.from(new Set(e.targetIfs)).join(', '),
+    }));
+  })();
+
   const nodePositions = deviceNodes.reduce((acc, node, index) => {
     acc[node.id] = getNodePosition(index, deviceNodes.length);
     return acc;
@@ -121,41 +165,54 @@ export default function Topology() {
             style={{ transform: `scale(${zoom})` }}
           >
             <svg className="w-full h-full pointer-events-none">
-              {deviceEdges.map((edge) => {
+              {mergedEdges.map((edge) => {
                 const srcPos = nodePositions[edge.source];
                 const dstPos = nodePositions[edge.target];
                 if (!srcPos || !dstPos) return null;
-                
+
+                // positions for interface labels near each end (15% from source, 85% from source)
+                const srcLabelX = srcPos.x + (dstPos.x - srcPos.x) * 0.15;
+                const srcLabelY = srcPos.y + (dstPos.y - srcPos.y) * 0.15;
+                const dstLabelX = srcPos.x + (dstPos.x - srcPos.x) * 0.85;
+                const dstLabelY = srcPos.y + (dstPos.y - srcPos.y) * 0.85;
+
                 return (
                   <g key={edge.id}>
-                    <line 
-                      x1={srcPos.x} 
-                      y1={srcPos.y} 
-                      x2={dstPos.x} 
-                      y2={dstPos.y} 
+                    <line
+                      x1={srcPos.x}
+                      y1={srcPos.y}
+                      x2={dstPos.x}
+                      y2={dstPos.y}
                       stroke="hsl(var(--border))"
-                      strokeWidth="2" 
+                      strokeWidth="2"
                     />
-                    <circle cx={(srcPos.x + dstPos.x)/2} cy={(srcPos.y + dstPos.y)/2} r="3" fill="hsl(var(--muted-foreground))" />
-                    {/* Display interface names on the edge */}
-                    <text 
-                      x={(srcPos.x + dstPos.x)/2} 
-                      y={(srcPos.y + dstPos.y)/2 - 8}
-                      fontSize="10"
-                      fill="hsl(var(--muted-foreground))"
-                      textAnchor="middle"
-                    >
-                      {edge.sourceInterface}
-                    </text>
-                    <text 
-                      x={(srcPos.x + dstPos.x)/2} 
-                      y={(srcPos.y + dstPos.y)/2 + 12}
-                      fontSize="10"
-                      fill="hsl(var(--muted-foreground))"
-                      textAnchor="middle"
-                    >
-                      {edge.targetInterface}
-                    </text>
+                    <circle cx={(srcPos.x + dstPos.x) / 2} cy={(srcPos.y + dstPos.y) / 2} r="3" fill="hsl(var(--muted-foreground))" />
+
+                    {/* Source-side interface label */}
+                    {edge.sourceInterface && (
+                      <text
+                        x={srcLabelX}
+                        y={srcLabelY - 6}
+                        fontSize="10"
+                        fill="hsl(var(--muted-foreground))"
+                        textAnchor="start"
+                      >
+                        {edge.sourceInterface}
+                      </text>
+                    )}
+
+                    {/* Target-side interface label */}
+                    {edge.targetInterface && (
+                      <text
+                        x={dstLabelX}
+                        y={dstLabelY + 10}
+                        fontSize="10"
+                        fill="hsl(var(--muted-foreground))"
+                        textAnchor="end"
+                      >
+                        {edge.targetInterface}
+                      </text>
+                    )}
                   </g>
                 );
               })}
@@ -164,6 +221,9 @@ export default function Topology() {
             {deviceNodes.map((node) => {
               const pos = nodePositions[node.id];
               if (!pos) return null;
+              
+              // Find device from Redux to get lldp_hostname
+              const device = devices.find(d => d.id === node.id);
               
               return (
                 <div
@@ -182,6 +242,11 @@ export default function Topology() {
                   <div className="mt-2 bg-card/80 backdrop-blur px-2 py-1 rounded text-xs font-medium border shadow-sm whitespace-nowrap">
                     {node.label}
                   </div>
+                  {device?.lldpHostname && (
+                    <div className="text-[10px] text-gray-500 font-normal">
+                      LLDP: {device.lldpHostname}
+                    </div>
+                  )}
                   <div className="text-[10px] text-muted-foreground">{node.ipAddress}</div>
                 </div>
               );

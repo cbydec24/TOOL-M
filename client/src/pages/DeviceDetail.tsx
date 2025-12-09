@@ -110,6 +110,11 @@ export default function DeviceDetail() {
                 {(device.status || 'unknown').toUpperCase()}
               </Badge>
             </h1>
+            {device.lldpHostname && (
+              <p className="text-sm text-gray-500 mt-1">
+                LLDP Hostname: {device.lldpHostname}
+              </p>
+            )}
             <p className="text-muted-foreground font-mono text-sm mt-1">
               {(() => {
                 const anyD = device as any;
@@ -154,6 +159,16 @@ export default function DeviceDetail() {
           <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
             <h3 className="font-semibold mb-4">Device Information</h3>
             <div className="space-y-4 text-sm">
+              <div className="flex justify-between py-1 border-b">
+                <span className="text-muted-foreground">Hostname</span>
+                <span>{device.hostname || 'Unknown'}</span>
+              </div>
+              {device.lldpHostname && (
+                <div className="flex justify-between py-1 border-b">
+                  <span className="text-muted-foreground">LLDP Hostname</span>
+                  <span className="text-gray-600">{device.lldpHostname}</span>
+                </div>
+              )}
               <div className="flex justify-between py-1 border-b">
                 <span className="text-muted-foreground">Vendor</span>
                 <span>{device.vendor || 'Unknown'}</span>

@@ -46,6 +46,7 @@ class Device(DeviceBase):
     ssh_enabled: bool
     ssh_username: Optional[str] = None
     ssh_port: int
+    lldp_hostname: Optional[str] = None  # LLDP hostname from discovered device
 
     class Config:
         orm_mode = True
@@ -104,12 +105,28 @@ class Alert(AlertBase):
         orm_mode = True
 
 # -----------------------------
+# --- Discovered Device (LLDP) ---
+# -----------------------------
+class DiscoveredDeviceBase(BaseModel):
+    lldp_hostname: str
+    ip_address: Optional[str] = None
+
+class DiscoveredDevice(DiscoveredDeviceBase):
+    id: int
+    first_seen: Optional[datetime] = None
+    last_seen: Optional[datetime] = None
+
+    class Config:
+        orm_mode = True
+
+# -----------------------------
 # --- Topology Links ---
 # -----------------------------
 class TopologyLinkBase(BaseModel):
     src_device_id: int
     src_interface: str
     dst_device_id: Optional[int] = None
+    dst_discovered_device_id: Optional[int] = None
     dst_interface: Optional[str] = None
     dst_hostname: Optional[str] = None
 

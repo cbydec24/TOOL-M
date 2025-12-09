@@ -81,8 +81,11 @@ export default function Devices() {
     if (search) {
       filtered = filtered.filter((d) => {
         const hostname = d.hostname ?? "";
+        const lldpHostname = d.lldpHostname ?? "";
         const ip = d.ipAddress ?? "";
-        return hostname.toLowerCase().includes(search.toLowerCase()) || ip.includes(search);
+        return hostname.toLowerCase().includes(search.toLowerCase()) || 
+               lldpHostname.toLowerCase().includes(search.toLowerCase()) || 
+               ip.includes(search);
       });
     }
 

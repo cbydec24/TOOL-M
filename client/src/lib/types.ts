@@ -11,6 +11,7 @@ export interface Site {
 export interface Device {
   id: number;
   hostname: string | null;
+  lldpHostname?: string | null;  // LLDP-discovered hostname (from neighbors)
   ipAddress: string;
   siteId: number | null;
   deviceType: string;

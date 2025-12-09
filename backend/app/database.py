@@ -35,3 +35,25 @@ async def init_db():
             log.info("Checked/created topology_links.dst_hostname")
         except Exception as e:
             log.warning(f"Could not ensure dst_hostname column: {e}")
+
+        # Ensure topology_links.dst_discovered_device_id exists
+        try:
+            log.info("Ensuring topology_links.dst_discovered_device_id column exists")
+            await conn.execute(text("""
+                ALTER TABLE topology_links
+                ADD COLUMN IF NOT EXISTS dst_discovered_device_id INTEGER
+            """))
+            log.info("Checked/created topology_links.dst_discovered_device_id")
+        except Exception as e:
+            log.warning(f"Could not ensure dst_discovered_device_id column: {e}")
+
+        # Ensure devices.lldp_hostname exists
+        try:
+            log.info("Ensuring devices.lldp_hostname column exists")
+            await conn.execute(text("""
+                ALTER TABLE devices
+                ADD COLUMN IF NOT EXISTS lldp_hostname VARCHAR(100)
+            """))
+            log.info("Checked/created devices.lldp_hostname")
+        except Exception as e:
+            log.warning(f"Could not ensure lldp_hostname column: {e}")
