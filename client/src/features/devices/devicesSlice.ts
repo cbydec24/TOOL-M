@@ -49,13 +49,24 @@ const normalizeDeviceType = (raw?: string | null): string => {
 export const fetchDevices = createAsyncThunk<Device[]>(
   "devices/fetchDevices",
   async () => {
+    // Import getSites to get site names
+    const { getSites } = await import("@/lib/api");
+    
     // Fetch devices and normalize deviceType to a canonical set used by the UI
     const devices = (await getDevices()) as Device[];
+    
+    // Fetch sites for mapping
+    const sites = await getSites();
+    const siteMap = sites.reduce((acc: Record<number, string>, site: any) => {
+      acc[site.id] = site.siteName;
+      return acc;
+    }, {});
 
     return devices.map((d) => ({
       ...d,
       deviceType: normalizeDeviceType(d.deviceType),
-    } as Device));
+      siteName: d.siteId ? siteMap[d.siteId] || null : null,
+    } as any));
   }
 );
 

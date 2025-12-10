@@ -1,23 +1,50 @@
 import { Search, Bell, HelpCircle, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useSelector } from 'react-redux';
-import { RootState } from '@/store';
+import { useSelector, useDispatch } from 'react-redux';
+import { RootState, AppDispatch } from '@/store';
+import { useLocation } from 'wouter';
+import { setSearch } from '@/features/devices/devicesSlice';
+import { useRef, useEffect } from 'react';
 
 export function Header() {
+  const dispatch = useDispatch<AppDispatch>();
+  const search = useSelector((state: RootState) => state.devices.search);
   const unreadAlerts = useSelector((state: RootState) => state.alerts.unreadCount);
+  const [location] = useLocation();
+  const searchTimeoutRef = useRef<NodeJS.Timeout>();
+  
+  // Hide search bar on Device Detail page
+  const isDeviceDetailPage = /^\/devices\/\d+$/.test(location);
+
+  const handleSearchChange = (value: string) => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(() => {
+      dispatch(setSearch(value));
+    }, 500);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
+  }, []);
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background/80 px-6 backdrop-blur-md">
       <div className="flex flex-1 items-center gap-4">
-        <div className="relative w-full max-w-md">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search devices, IP, MAC..."
-            className="w-full bg-muted/50 pl-9 md:w-2/3 lg:w-full border-transparent focus-visible:bg-background focus-visible:border-primary focus-visible:ring-0"
-          />
-        </div>
+        {!isDeviceDetailPage && (
+          <div className="relative w-full max-w-md">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search devices, IP, MAC..."
+              defaultValue={search}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="w-full bg-muted/50 pl-9 md:w-2/3 lg:w-full border-transparent focus-visible:bg-background focus-visible:border-primary focus-visible:ring-0"
+            />
+          </div>
+        )}
       </div>
       
       <div className="flex items-center gap-4">

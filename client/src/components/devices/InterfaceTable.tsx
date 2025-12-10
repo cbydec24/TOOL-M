@@ -16,7 +16,20 @@ interface InterfaceTableProps {
 }
 
 export function InterfaceTable({ interfaces, showAdvanced = false }: InterfaceTableProps) {
-  if (interfaces.length === 0) {
+  const allowedPrefixes = [
+    'gi', 'gigabitethernet', 'te', 'tengigabitethernet', 'twe', 'twentyfivegige',
+    'fo', 'fortygigabitethernet', 'hu', 'hundredgige', 'fa', 'fastethernet',
+    'eth', 'ethernet', 'po', 'port-channel', 'vlan', 'vl', 'lo', 'loopback',
+    'tu', 'tunnel', 'mgmt', 'management'
+  ];
+
+  const filteredInterfaces = interfaces.filter((iface) => {
+    const name = (iface.interfaceName || '').trim().toLowerCase();
+    if (!name) return false;
+    return allowedPrefixes.some(pref => name.startsWith(pref));
+  });
+
+  if (filteredInterfaces.length === 0) {
     return (
       <div className="rounded-md border p-8 text-center text-muted-foreground">
         No interfaces found for this device.
@@ -24,8 +37,47 @@ export function InterfaceTable({ interfaces, showAdvanced = false }: InterfaceTa
     );
   }
 
-  const upCount = interfaces.filter(i => i.status === 'up').length;
-  const downCount = interfaces.filter(i => i.status === 'down').length;
+  const upCount = filteredInterfaces.filter(i => i.status === 'up').length;
+  const downCount = filteredInterfaces.filter(i => i.status === 'down').length;
+
+  // Natural sort: split into numeric and non-numeric tokens for human-friendly ordering
+  const tokenize = (s: string) => {
+    const re = /(\d+)|(\D+)/g;
+    const tokens: Array<number|string> = [];
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(s)) !== null) {
+      if (m[1] !== undefined) tokens.push(Number(m[1]));
+      else if (m[2] !== undefined) tokens.push(m[2].toLowerCase());
+    }
+    return tokens;
+  };
+
+  const naturalCompare = (a: string, b: string) => {
+    if (a === b) return 0;
+    const ta = tokenize(a);
+    const tb = tokenize(b);
+    const len = Math.max(ta.length, tb.length);
+    for (let i = 0; i < len; i++) {
+      const va = ta[i];
+      const vb = tb[i];
+      if (va === undefined) return -1;
+      if (vb === undefined) return 1;
+      if (typeof va === 'number' && typeof vb === 'number') {
+        if (va !== vb) return va - vb;
+        continue;
+      }
+      const sa = String(va);
+      const sb = String(vb);
+      if (sa !== sb) return sa.localeCompare(sb);
+    }
+    return 0;
+  };
+
+  const sortedInterfaces = filteredInterfaces.slice().sort((x, y) => {
+    const a = (x.interfaceName || '').trim();
+    const b = (y.interfaceName || '').trim();
+    return naturalCompare(a.toLowerCase(), b.toLowerCase());
+  });
 
   return (
     <div className="space-y-4">
@@ -69,7 +121,7 @@ export function InterfaceTable({ interfaces, showAdvanced = false }: InterfaceTa
           </TableHeader>
 
           <TableBody>
-            {interfaces.map((iface, idx) => {
+            {sortedInterfaces.map((iface, idx) => {
               const isUp = iface.status === 'up';
               return (
                 <TableRow

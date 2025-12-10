@@ -17,13 +17,15 @@ export function CompactDeviceGrid({ devices, sortBy, sortDir, onSort }: CompactD
   const [, setLocation] = useLocation();
   const [colWidths, setColWidths] = React.useState({
     hostname: 140,
+    site: 120,
     lldpHostname: 120,
     ip: 130,
     type: 70,
     snmp: 50,
     bandwidth: 100,
     lastSeen: 130,
-    ssh: 100,
+    ssh: 60,
+    status: 80,
   });
 
   const handleMouseDown = (col: keyof typeof colWidths) => (e: React.MouseEvent) => {
@@ -72,7 +74,9 @@ export function CompactDeviceGrid({ devices, sortBy, sortDir, onSort }: CompactD
 
   if (devices.length === 0) {
     return (
-      <div className="text-center py-8 text-muted-foreground">No devices to show.</div>
+      <div className="text-center py-8 text-muted-foreground">
+        No devices match your search.
+      </div>
     );
   }
 
@@ -81,6 +85,17 @@ export function CompactDeviceGrid({ devices, sortBy, sortDir, onSort }: CompactD
       <table className="w-full border-collapse text-xs">
         <thead className="bg-muted/50 sticky top-0">
           <tr className="border-b">
+            <th
+              className="px-2 py-1 text-left font-medium text-muted-foreground cursor-pointer relative"
+              style={{ width: `${colWidths.site}px` }}
+              onClick={() => onSort?.('site')}
+            >
+              <span>Site {sortBy === 'site' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</span>
+              <div
+                className="absolute right-0 top-0 h-full w-1 bg-gray-300 cursor-col-resize hover:bg-blue-500"
+                onMouseDown={handleMouseDown('site')}
+              />
+            </th>
             <th
               className="px-2 py-1 text-left font-medium text-muted-foreground cursor-pointer relative"
               style={{ width: `${colWidths.hostname}px` }}
@@ -159,7 +174,10 @@ export function CompactDeviceGrid({ devices, sortBy, sortDir, onSort }: CompactD
               />
             </th>
             <th className="px-2 py-1 text-center font-medium text-muted-foreground" style={{ width: `${colWidths.ssh}px` }}>
-              SSH / Status
+              SSH
+            </th>
+            <th className="px-2 py-1 text-center font-medium text-muted-foreground" style={{ width: `${colWidths.status}px` }}>
+              Status
             </th>
           </tr>
         </thead>
@@ -176,6 +194,9 @@ export function CompactDeviceGrid({ devices, sortBy, sortDir, onSort }: CompactD
                 onClick={() => setLocation(`/devices/${device.id}`)}
                 className="border-b hover:bg-muted/30 cursor-pointer"
               >
+                <td className="px-2 py-1 truncate text-muted-foreground" style={{ width: `${colWidths.site}px` }}>
+                  {(device as any).siteName || "-"}
+                </td>
                 <td className="px-2 py-1 truncate font-medium" style={{ width: `${colWidths.hostname}px` }}>
                   {device.hostname || "Unknown"}
                 </td>
@@ -197,33 +218,33 @@ export function CompactDeviceGrid({ devices, sortBy, sortDir, onSort }: CompactD
                     <span className="text-xs font-medium">{Math.max(inMbps, outMbps).toFixed(1)}</span>
                   </div>
                 </td>
-                <td className="px-2 py-1 truncate text-muted-foreground text-xs" style={{ width: `${colWidths.lastSeen}px` }}>
+                <td className="px-2 py-1 text-center" style={{ width: `${colWidths.lastSeen}px` }}>
                   {formatDateTime(device.lastSeen)}
                 </td>
                 <td className="px-2 py-1 text-center" style={{ width: `${colWidths.ssh}px` }}>
-                  <div className="flex items-center justify-center gap-1">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const url = `toolssh://${device.sshUsername}@${device.ipAddress}:22`;
-                        window.location.href = url;
-                      }}
-                      className="px-2 py-1 h-auto"
-                      title="SSH to device"
-                    >
-                      <Terminal className="w-4 h-4" />
-                    </Button>
-                    <Badge
-                      className={cn(
-                        "text-white font-semibold text-xs capitalize",
-                        status === "online" ? "bg-green-600" : "bg-red-600"
-                      )}
-                    >
-                      {status}
-                    </Badge>
-                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const url = `toolssh://${device.sshUsername}@${device.ipAddress}:22`;
+                      window.location.href = url;
+                    }}
+                    className="px-2 py-1 h-auto"
+                    title="SSH to device"
+                  >
+                    <Terminal className="w-4 h-4" />
+                  </Button>
+                </td>
+                <td className="px-2 py-1 text-center" style={{ width: `${colWidths.status}px` }}>
+                  <Badge
+                    className={cn(
+                      "text-white font-semibold text-xs capitalize",
+                      status === "online" ? "bg-green-600" : "bg-red-600"
+                    )}
+                  >
+                    {status}
+                  </Badge>
                 </td>
               </tr>
             );

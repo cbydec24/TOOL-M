@@ -13,39 +13,63 @@ export function InterfaceGrid({ interfaces }: InterfaceGridProps) {
     );
   }
 
+  const allowedPrefixes = [
+    'gi', 'gigabitethernet', 'te', 'tengigabitethernet', 'twe', 'twentyfivegige',
+    'fo', 'fortygigabitethernet', 'hu', 'hundredgige', 'fa', 'fastethernet',
+    'eth', 'ethernet', 'po', 'port-channel', 'vlan', 'vl', 'lo', 'loopback',
+    'tu', 'tunnel', 'mgmt', 'management'
+  ];
+
+  const filteredInterfaces = interfaces.filter(iface => {
+    const name = (iface.interfaceName || '').trim().toLowerCase();
+    if (!name) return false;
+    return allowedPrefixes.some(pref => name.startsWith(pref));
+  });
+
+  // Natural sort for human-friendly numeric ordering (e.g., Gi1/0/2 before Gi1/0/10)
+  const tokenize = (s: string) => {
+    const re = /(\d+)|(\D+)/g;
+    const tokens: Array<number|string> = [];
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(s)) !== null) {
+      if (m[1] !== undefined) tokens.push(Number(m[1]));
+      else if (m[2] !== undefined) tokens.push(m[2].toLowerCase());
+    }
+    return tokens;
+  };
+
+  const naturalCompare = (a: string, b: string) => {
+    if (a === b) return 0;
+    const ta = tokenize(a);
+    const tb = tokenize(b);
+    const len = Math.max(ta.length, tb.length);
+    for (let i = 0; i < len; i++) {
+      const va = ta[i];
+      const vb = tb[i];
+      if (va === undefined) return -1;
+      if (vb === undefined) return 1;
+      if (typeof va === 'number' && typeof vb === 'number') {
+        if (va !== vb) return va - vb;
+        continue;
+      }
+      const sa = String(va);
+      const sb = String(vb);
+      if (sa !== sb) return sa.localeCompare(sb);
+    }
+    return 0;
+  };
+
+  const sortedFiltered = filteredInterfaces.slice().sort((a, b) => naturalCompare((a.interfaceName || '').toLowerCase(), (b.interfaceName || '').toLowerCase()));
+
   // Categorize interfaces
   const getInterfaceType = (name: string) => {
     const lower = name.toLowerCase();
-    if (lower.includes('vlan')) return 'vlan';
-    if (lower.includes('ethernet') || lower.includes('gigabit') || lower.includes('tengigabit')) return 'ethernet';
-    if (lower.includes('port-channel')) return 'portchannel';
-    if (lower.includes('stack')) return 'stack';
+    if (lower.startsWith('vlan') || lower.startsWith('vl')) return 'vlan';
+    if (lower.startsWith('ethernet') || lower.startsWith('gigabit') || lower.startsWith('tengigabit') || lower.startsWith('eth') || lower.startsWith('gi') || lower.startsWith('te')) return 'ethernet';
+    if (lower.startsWith('port-channel') || lower.startsWith('po')) return 'portchannel';
+    if (lower.startsWith('loopback') || lower.startsWith('lo')) return 'loopback';
+    if (lower.startsWith('tunnel') || lower.startsWith('tu')) return 'tunnel';
     return 'other';
-  };
-
-  const isPhysicalInterface = (iface: NetworkInterface) => {
-    if (!iface.interfaceName) return false;
-    const lower = iface.interfaceName.toLowerCase();
-    
-    // Filter out non-physical interfaces
-    const excludePatterns = [
-      'status', 'null', 'button', 'mgmt', 'management',
-      'loopback', 'tunnel', 'bridge', 'virtual', 'dummy',
-      'bluetooth', 'unrouted', 'appgigabit', 'stacksub'
-    ];
-    
-    // Check if interface name contains any excluded patterns
-    if (excludePatterns.some(pattern => lower.includes(pattern))) {
-      return false;
-    }
-    
-    // Only allow known physical interface types
-    const allowedPatterns = [
-      'vlan', 'ethernet', 'gigabit', 'tengigabit', 'fastethernet',
-      'port-channel', 'stack', 'serial'
-    ];
-    
-    return allowedPatterns.some(pattern => lower.includes(pattern));
   };
 
   const getShortIdentifier = (iface: NetworkInterface) => {
@@ -67,17 +91,16 @@ export function InterfaceGrid({ interfaces }: InterfaceGridProps) {
     return name.substring(0, 2);
   };
 
-  // Separate VLANs and Interfaces - filter only physical interfaces
-  const physicalInterfaces = interfaces.filter(isPhysicalInterface);
-  const vlanInterfaces = physicalInterfaces.filter(i => getInterfaceType(i.interfaceName || '') === 'vlan');
-  const stackPorts = physicalInterfaces.filter(i => getInterfaceType(i.interfaceName || '') === 'stack');
-  const regularInterfaces = physicalInterfaces.filter(i => {
+  // Separate VLANs and Interfaces from the filtered list
+  const vlanInterfaces = sortedFiltered.filter(i => getInterfaceType(i.interfaceName || '') === 'vlan');
+  const stackPorts = sortedFiltered.filter(i => getInterfaceType(i.interfaceName || '') === 'stack');
+  const regularInterfaces = sortedFiltered.filter(i => {
     const type = getInterfaceType(i.interfaceName || '');
-    return type !== 'vlan' && type !== 'stack';
+    return type !== 'vlan' && type !== 'stack' && type !== 'loopback' && type !== 'tunnel';
   });
 
-  const upCount = physicalInterfaces.filter(i => i.status === 'up').length;
-  const downCount = physicalInterfaces.filter(i => i.status === 'down').length;
+  const upCount = sortedFiltered.filter(i => i.status === 'up').length;
+  const downCount = sortedFiltered.filter(i => i.status === 'down').length;
   
   // VLAN and Interface specific counts for the small summary below the overview
   const vlanTotal = vlanInterfaces.length;

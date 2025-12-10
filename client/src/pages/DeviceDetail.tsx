@@ -124,77 +124,44 @@ export default function DeviceDetail() {
             </p>
           </div>
         </div>
+        <div className="flex items-center gap-4">
+          {/* Interface counts placed beside SSH (device info removed from header) */}
 
-        <div className="flex gap-2">
-          <Button variant="outline">
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Poll Now
-          </Button>
-          <Button variant="outline">
-            <Terminal className="mr-2 h-4 w-4" />
-            SSH
-          </Button>
-          <Button variant="outline">
-            <Shield className="mr-2 h-4 w-4" />
-            Backup
-          </Button>
-          <Button variant="ghost" size="icon">
-            <Settings className="h-4 w-4" />
-          </Button>
+          {/* Show only Last Seen timestamp in header as requested */}
+          <div className="text-sm text-muted-foreground mr-2">
+            Last Seen: {device.lastSeen ? new Date(device.lastSeen).toLocaleString() : 'Never'}
+          </div>
+
+          <div className="flex gap-2">
+            <Button variant="outline">
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Poll Now
+            </Button>
+            <Button variant="outline">
+              <Terminal className="mr-2 h-4 w-4" />
+              SSH
+            </Button>
+            <Button variant="outline">
+              <Shield className="mr-2 h-4 w-4" />
+              Backup
+            </Button>
+            <Button variant="ghost" size="icon">
+              <Settings className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
 
-          <div className="grid gap-6 md:grid-cols-3">
-        {/* LEFT COLUMN */}
+          <div className="grid gap-6 md:grid-cols-1">
+        {/* LEFT COLUMN (stacked) */}
         <div className="space-y-6">
           <DeviceStats device={device} stats={stats} />
 
-          {interfaces && interfaces.length > 0 && (
-            <div className="rounded-lg border bg-card p-4">
-              <h3 className="font-semibold mb-3">Interfaces Overview</h3>
-              <InterfaceGrid interfaces={interfaces} />
-            </div>
-          )}
-
-          <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
-            <h3 className="font-semibold mb-4">Device Information</h3>
-            <div className="space-y-4 text-sm">
-              <div className="flex justify-between py-1 border-b">
-                <span className="text-muted-foreground">Hostname</span>
-                <span>{device.hostname || 'Unknown'}</span>
-              </div>
-              {device.lldpHostname && (
-                <div className="flex justify-between py-1 border-b">
-                  <span className="text-muted-foreground">LLDP Hostname</span>
-                  <span className="text-gray-600">{device.lldpHostname}</span>
-                </div>
-              )}
-              <div className="flex justify-between py-1 border-b">
-                <span className="text-muted-foreground">Vendor</span>
-                <span>{device.vendor || 'Unknown'}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b">
-                <span className="text-muted-foreground">Device Type</span>
-                <span>{device.deviceType}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b">
-                <span className="text-muted-foreground">Last Seen</span>
-                <span>{device.lastSeen ? new Date(device.lastSeen).toLocaleString() : 'Never'}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b">
-                <span className="text-muted-foreground">SNMP Version</span>
-                <span>{device.snmpVersion || 'N/A'}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b">
-                <span className="text-muted-foreground">SSH Port</span>
-                <span>{device.sshPort || 22}</span>
-              </div>
-            </div>
-          </div>
+          {/* Device Information moved to header for condensed view */}
         </div>
 
-        {/* RIGHT COLUMN */}
-        <div className="md:col-span-2">
+        {/* RIGHT COLUMN (full width) */}
+        <div>
           <Tabs defaultValue="interfaces" className="w-full">
             <TabsList>
               <TabsTrigger value="interfaces">Interfaces</TabsTrigger>
@@ -203,13 +170,14 @@ export default function DeviceDetail() {
             </TabsList>
 
             <TabsContent value="interfaces" className="mt-4">
-              {/* Interface grid with colored boxes and stats */}
+              {/* Interface overview (horizontal) above the table for proper column widths */}
               {interfaces && interfaces.length > 0 && (
                 <div className="mb-4">
-                  {/** Lazy-load a visual grid component */}
-                  {/** Import added below via new component */}
+                  <InterfaceGrid interfaces={interfaces} />
                 </div>
               )}
+
+              {/* Detailed interface list below the overview */}
               <InterfaceTable interfaces={interfaces} showAdvanced={true} />
             </TabsContent>
 
